@@ -14,7 +14,7 @@ from chains import (
     generate_ticket,
 )
 from fastapi import FastAPI, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from langchain.callbacks.base import BaseCallbackHandler
 from threading import Thread
 from queue import Queue, Empty
@@ -31,6 +31,20 @@ password = os.getenv("NEO4J_PASSWORD")
 ollama_base_url = os.getenv("OLLAMA_BASE_URL")
 embedding_model_name = os.getenv("EMBEDDING_MODEL")
 llm_name = os.getenv("LLM")
+
+required_env = {
+    "NEO4J_URI": url,
+    "NEO4J_USERNAME": username,
+    "NEO4J_PASSWORD": password,
+    "EMBEDDING_MODEL": embedding_model_name,
+    "LLM": llm_name,
+}
+missing_env = [name for name, value in required_env.items() if not value]
+if missing_env:
+    raise RuntimeError(
+        "Missing required environment variables: " + ", ".join(sorted(missing_env))
+    )
+
 # Remapping for Langchain Neo4j integration
 os.environ["NEO4J_URL"] = url
 
@@ -73,7 +87,7 @@ def stream(cb, q) -> Generator:
     job_done = object()
 
     def task():
-        x = cb()
+        cb()
         q.put(job_done)
 
     t = Thread(target=task)
@@ -99,8 +113,8 @@ origins = ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
-    allow_methods=["*"],
+    allow_credentials=False,
+    allow_methods=["GET"],
     allow_headers=["*"],
 )
 
@@ -111,12 +125,12 @@ async def root():
 
 
 class Question(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=4000)
     rag: bool = False
 
 
 class BaseTicket(BaseModel):
-    text: str
+    text: str = Field(min_length=1, max_length=4000)
 
 
 @app.get("/query-stream")
